@@ -12,7 +12,7 @@
 
 typedef enum { FALSE, TRUE } BOOL;
 
-typedef struct 
+typedef struct
 {
   char data[30];
   uint32_t time;
@@ -20,9 +20,9 @@ typedef struct
 
 typedef struct
 {
-    BOOL flag[2];
-    int turn;
-    basic_data data_area[MAX_DATA];
+  BOOL flag[2];
+  int turn;
+  basic_data data_area[MAX_DATA];
 } shared_memory_area_struct;
 
 
@@ -30,4 +30,4 @@ typedef struct
 
 #endif /* INTERPRCESS_ACQ_H */
 
- 
+
