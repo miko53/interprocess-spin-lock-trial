@@ -66,6 +66,15 @@ static void enter_critical_section(shared_memory_area_struct* pSharedMemory)
   }
   clock_gettime(CLOCK_REALTIME, &end);
 #endif /* WITH_SPIN_LOCK */
+#ifdef WITH_SPIN_LOCK_WITH_PROCESS_ID
+  clock_gettime(CLOCK_REALTIME, &begin);
+  while (__sync_val_compare_and_swap(&pSharedMemory->lock, SPIN_LOCK_NO_LOCKED, process_id) != SPIN_LOCK_NO_LOCKED)
+  {
+    //active loop
+    ;
+  }
+  clock_gettime(CLOCK_REALTIME, &end);
+#endif /* WITH_SPIN_LOCK_WITH_PROCESS_ID */
 }
 
 
@@ -81,6 +90,10 @@ static void leave_critical_section(shared_memory_area_struct* pSharedMemory)
   __sync_synchronize();
   pSharedMemory->lock = 0;
 #endif /* WITH_SPIN_LOCK */
+#ifdef WITH_SPIN_LOCK_WITH_PROCESS_ID
+  __sync_synchronize();
+  pSharedMemory->lock = SPIN_LOCK_NO_LOCKED;
+#endif /* WITH_SPIN_LOCK_WITH_PROCESS_ID */
 }
 
 
@@ -93,7 +106,7 @@ int main(int argc, char* argv[])
   int shmid;
   shared_memory_area_struct* pSharedMemory;
 
-#ifdef PETERSON_ALGO_N_PROCESS
+#if defined PETERSON_ALGO_N_PROCESS || defined WITH_SPIN_LOCK_WITH_PROCESS_ID
   if (argc != 2)
   {
     fprintf(stdout, "Error need argument\n");
@@ -108,7 +121,7 @@ int main(int argc, char* argv[])
       exit(EXIT_FAILURE);
     }
   }
-#endif /* PETERSON_ALGO_N_PROCESS */
+#endif /* PETERSON_ALGO_N_PROCESS || WITH_SPIN_LOCK_WITH_PROCESS_ID */
 
   shmid = shmget(SHARED_AREA_KEY, sizeof(shared_memory_area_struct), 0644 | IPC_CREAT);
 

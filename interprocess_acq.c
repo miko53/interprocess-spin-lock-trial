@@ -63,6 +63,15 @@ static void enter_critical_section(shared_memory_area_struct* pSharedMemory)
   }
   clock_gettime(CLOCK_REALTIME, &end);
 #endif /* WITH_SPIN_LOCK */
+#ifdef WITH_SPIN_LOCK_WITH_PROCESS_ID
+  clock_gettime(CLOCK_REALTIME, &begin);
+  while (__sync_val_compare_and_swap(&pSharedMemory->lock, SPIN_LOCK_NO_LOCKED, ACQ_PROCESS_ID) != SPIN_LOCK_NO_LOCKED)
+  {
+    //active loop
+    ;
+  }
+  clock_gettime(CLOCK_REALTIME, &end);
+#endif /* WITH_SPIN_LOCK_WITH_PROCESS_ID */
 }
 
 
@@ -78,6 +87,10 @@ static void leave_critical_section(shared_memory_area_struct* pSharedMemory)
   __sync_synchronize();
   pSharedMemory->lock = 0;
 #endif /* WITH_SPIN_LOCK */
+#ifdef WITH_SPIN_LOCK_WITH_PROCESS_ID
+  __sync_synchronize();
+  pSharedMemory->lock = SPIN_LOCK_NO_LOCKED;
+#endif /* WITH_SPIN_LOCK_WITH_PROCESS_ID */
 }
 
 
@@ -118,7 +131,11 @@ int main(int argc, char* argv[])
   //initialize the spinlock
   __sync_synchronize();
   pSharedMemory->lock = 0;
-#endif
+#endif /* WITH_SPIN_LOCK */
+#ifdef WITH_SPIN_LOCK_WITH_PROCESS_ID
+  __sync_synchronize();
+  pSharedMemory->lock = SPIN_LOCK_NO_LOCKED;
+#endif /* WITH_SPIN_LOCK_WITH_PROCESS_ID */
 
   int time = 0;
   char charToFill = 0;
@@ -145,6 +162,9 @@ int main(int argc, char* argv[])
     {
       fprintf(stdout, "time = %d\n", time);
       fprintf(stdout, "Busy Wait : %ld s, %ld ns\n", end.tv_sec - begin.tv_sec, end.tv_nsec - begin.tv_nsec);
+#ifdef WITH_SPIN_LOCK_WITH_PROCESS_ID
+      fprintf(stdout, "current process ID = %d\n", pSharedMemory->lock);
+#endif /* WITH_SPIN_LOCK_WITH_PROCESS_ID */
     }
 
   }
