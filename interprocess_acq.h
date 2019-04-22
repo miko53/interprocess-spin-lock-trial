@@ -4,8 +4,9 @@
 #include <stdint.h>
 
 //#define PETERSON_ALGO
-#define PETERSON_ALGO_N_PROCESS
-#define NB_MAX_PROCESS            (4)
+//#define PETERSON_ALGO_N_PROCESS
+//#define NB_MAX_PROCESS            (4)
+#define WITH_SPIN_LOCK
 
 #define SHARED_AREA_KEY     0x10000000
 //#define SHARED_AREA_KEY     IPC_PRIVATE
@@ -34,6 +35,9 @@ typedef struct
   int level[NB_MAX_PROCESS];
   int last_to_enter[NB_MAX_PROCESS];
 #endif /* PETERSON_ALGO_N_PROCESS*/
+#ifdef WITH_SPIN_LOCK
+  int lock;
+#endif /* WITH_SPIN_LOCK */
   basic_data data_area[MAX_DATA];
 } shared_memory_area_struct;
 

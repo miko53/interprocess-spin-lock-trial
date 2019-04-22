@@ -57,6 +57,15 @@ static void enter_critical_section(shared_memory_area_struct* pSharedMemory)
   }
   clock_gettime(CLOCK_REALTIME, &end);
 #endif /* PETERSON_ALGO_N_PROCESS */
+#ifdef WITH_SPIN_LOCK
+  clock_gettime(CLOCK_REALTIME, &begin);
+  while (__sync_bool_compare_and_swap(&pSharedMemory->lock, FALSE, TRUE) == FALSE)
+  {
+    //active loop
+    ;
+  }
+  clock_gettime(CLOCK_REALTIME, &end);
+#endif /* WITH_SPIN_LOCK */
 }
 
 
@@ -68,6 +77,10 @@ static void leave_critical_section(shared_memory_area_struct* pSharedMemory)
 #ifdef PETERSON_ALGO_N_PROCESS
   pSharedMemory->level[process_id] = -1;
 #endif /* PETERSON_ALGO_N_PROCESS */
+#ifdef WITH_SPIN_LOCK
+  __sync_synchronize();
+  pSharedMemory->lock = 0;
+#endif /* WITH_SPIN_LOCK */
 }
 
 
