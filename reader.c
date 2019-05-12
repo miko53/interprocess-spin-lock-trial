@@ -79,6 +79,12 @@ int main(int argc, char* argv[])
           break;
         }
       }
+
+      if (i == 0)
+      {
+        fprintf(stdout, "data is %s ts = %d\n", stringRead, pData->timestamp);
+      }
+
     }
 
     nanosleep(&waitTime, NULL);
