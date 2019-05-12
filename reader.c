@@ -19,85 +19,6 @@ struct timespec waitTime =
 struct timespec begin;
 struct timespec end;
 
-int process_id;
-
-
-static void enter_critical_section(shared_memory_area_struct* pSharedMemory)
-{
-#ifdef PETERSON_ALGO
-  pSharedMemory->flag[0] = TRUE;
-  pSharedMemory->turn = 1;
-
-  clock_gettime(CLOCK_REALTIME, &begin);
-
-  __sync_synchronize();
-  while ((pSharedMemory->flag[1] == TRUE) && (pSharedMemory->turn == 1))
-  {
-    // active loop
-  }
-  clock_gettime(CLOCK_REALTIME, &end);
-#endif /* PETERSON_ALGO */
-#ifdef PETERSON_ALGO_N_PROCESS
-  clock_gettime(CLOCK_REALTIME, &begin);
-  for (int i = 0 ; i < NB_MAX_PROCESS; i++)
-  {
-    pSharedMemory->level[process_id] = i;
-    pSharedMemory->last_to_enter[i] = process_id;
-
-    for (int j = 0; j < NB_MAX_PROCESS; j++)
-    {
-      if (j != process_id)
-      {
-        __sync_synchronize();
-        while ((pSharedMemory->last_to_enter[i] == process_id) &&
-               (pSharedMemory->level[j] >= pSharedMemory->level[process_id]))
-          ;
-      }
-    }
-  }
-  clock_gettime(CLOCK_REALTIME, &end);
-#endif /* PETERSON_ALGO_N_PROCESS */
-#ifdef WITH_SPIN_LOCK
-  clock_gettime(CLOCK_REALTIME, &begin);
-  while (__sync_bool_compare_and_swap(&pSharedMemory->lock, FALSE, TRUE) == FALSE)
-  {
-    //active loop
-    ;
-  }
-  clock_gettime(CLOCK_REALTIME, &end);
-#endif /* WITH_SPIN_LOCK */
-#ifdef WITH_SPIN_LOCK_WITH_PROCESS_ID
-  clock_gettime(CLOCK_REALTIME, &begin);
-  while (__sync_val_compare_and_swap(&pSharedMemory->lock, SPIN_LOCK_NO_LOCKED, process_id) != SPIN_LOCK_NO_LOCKED)
-  {
-    //active loop
-    ;
-  }
-  clock_gettime(CLOCK_REALTIME, &end);
-#endif /* WITH_SPIN_LOCK_WITH_PROCESS_ID */
-}
-
-
-static void leave_critical_section(shared_memory_area_struct* pSharedMemory)
-{
-#ifdef PETERSON_ALGO
-  pSharedMemory->flag[0] = FALSE;
-#endif /* PETERSON_ALGO */
-#ifdef PETERSON_ALGO_N_PROCESS
-  pSharedMemory->level[process_id] = -1;
-#endif /* PETERSON_ALGO_N_PROCESS */
-#ifdef WITH_SPIN_LOCK
-  __sync_synchronize();
-  pSharedMemory->lock = 0;
-#endif /* WITH_SPIN_LOCK */
-#ifdef WITH_SPIN_LOCK_WITH_PROCESS_ID
-  __sync_synchronize();
-  pSharedMemory->lock = SPIN_LOCK_NO_LOCKED;
-#endif /* WITH_SPIN_LOCK_WITH_PROCESS_ID */
-}
-
-
-
 int main(int argc, char* argv[])
 {
   UNUSED(argc);
@@ -106,25 +27,7 @@ int main(int argc, char* argv[])
   int shmid;
   shared_memory_area_struct* pSharedMemory;
 
-#if defined PETERSON_ALGO_N_PROCESS || defined WITH_SPIN_LOCK_WITH_PROCESS_ID
-  if (argc != 2)
-  {
-    fprintf(stdout, "Error need argument\n");
-    exit(EXIT_FAILURE);
-  }
-  else
-  {
-    process_id = atoi(argv[1]);
-    if ((process_id <= 0) || (process_id > NB_MAX_PROCESS))
-    {
-      fprintf(stdout, "wrong process ID\n");
-      exit(EXIT_FAILURE);
-    }
-  }
-#endif /* PETERSON_ALGO_N_PROCESS || WITH_SPIN_LOCK_WITH_PROCESS_ID */
-
-  shmid = shmget(SHARED_AREA_KEY, sizeof(shared_memory_area_struct), 0644 | IPC_CREAT);
-
+  shmid = shmget(SHARED_AREA_KEY, sizeof(shared_memory_area_struct), 0644 /*| SHM_HUGETLB */ /*| IPC_CREAT*/);
   if (shmid == -1)
   {
     fprintf(stdout, "errno = %d\n", errno);
@@ -143,6 +46,7 @@ int main(int argc, char* argv[])
 
   char stringRead[30];
   stringRead[29] = '\0';
+  fprintf(stdout, "pSharedMemory = %p\n", pSharedMemory);
 
   while (1)
   {
@@ -151,13 +55,18 @@ int main(int argc, char* argv[])
     char toTest;
     for (i = 0; i < MAX_DATA; i++)
     {
-      //BEGIN critical section
-      enter_critical_section(pSharedMemory);
-      toTest = pSharedMemory->data_area[i].data[0];
-      strcpy(stringRead, pSharedMemory->data_area[i].data);
+     /* if (i ==0)
+      {
+        fprintf(stdout,"pSharedMemory->data_area[0].indexAcqOnGoing = %d\n", pSharedMemory->data_area[0].indexAcqOnGoing);
+        fprintf(stdout,"pSharedMemory->data_area[0].indexAcqOnGoing = %d\n", pSharedMemory->data_area[0].indexData);
+      }*/
+     
+      //int indexData = pSharedMemory->data_area[i].indexData;
+      int indexData = __atomic_load_n(&pSharedMemory->data_area[i].indexData, __ATOMIC_SEQ_CST);
+      descValue* pData = &pSharedMemory->desc[indexData];
+      toTest = pData->data[0];
+      strcpy(stringRead, pData->data);
       stringRead[29] = '\0';
-      //END critical section
-      leave_critical_section(pSharedMemory);
 
       //check if all is coherent
       for (j = 0; j < 29; j++)
@@ -165,16 +74,15 @@ int main(int argc, char* argv[])
         if (stringRead[j] != toTest)
         {
           fprintf(stdout, "Pb at %d (%c != %c)\n", j, stringRead[j], toTest);
-          fprintf(stdout, "Incoherence ==> data[%i] = %s (%ul)\n", i, stringRead, pSharedMemory->data_area[i].time);
+          fprintf(stdout, "Incoherence ==> data[%i] = %s (%ul)\n", i, stringRead, pData->timestamp);
           exit(EXIT_FAILURE);
           break;
         }
       }
-
     }
 
     nanosleep(&waitTime, NULL);
-    fprintf(stdout, "Busy Wait : %ld s, %ld ns\n", end.tv_sec - begin.tv_sec, end.tv_nsec - begin.tv_nsec);
+    //fprintf(stdout, "Busy Wait : %ld s, %ld ns\n", end.tv_sec - begin.tv_sec, end.tv_nsec - begin.tv_nsec);
   }
 
   if (shmdt(pSharedMemory) == -1)

@@ -18,82 +18,6 @@ struct timespec waitTime =
 struct timespec begin;
 struct timespec end;
 
-
-static void enter_critical_section(shared_memory_area_struct* pSharedMemory)
-{
-#ifdef PETERSON_ALGO
-  pSharedMemory->flag[1] = TRUE;
-  pSharedMemory->turn = 0;
-
-  clock_gettime(CLOCK_REALTIME, &begin);
-
-  __sync_synchronize();
-  while ((pSharedMemory->flag[0] == TRUE) && (pSharedMemory->turn == 0))
-  {
-    // active loop
-  }
-  clock_gettime(CLOCK_REALTIME, &end);
-#endif /* PETERSON_ALGO */
-#ifdef PETERSON_ALGO_N_PROCESS
-  clock_gettime(CLOCK_REALTIME, &begin);
-  for (int i = 0 ; i < NB_MAX_PROCESS; i++)
-  {
-    pSharedMemory->level[ACQ_PROCESS_ID] = i;
-    pSharedMemory->last_to_enter[i] = ACQ_PROCESS_ID;
-
-    for (int j = 0; j < NB_MAX_PROCESS; j++)
-    {
-      if (j != ACQ_PROCESS_ID)
-      {
-        __sync_synchronize();
-        while ((pSharedMemory->last_to_enter[i] == ACQ_PROCESS_ID) &&
-               (pSharedMemory->level[j] >= pSharedMemory->level[ACQ_PROCESS_ID]))
-          ;
-      }
-    }
-  }
-  clock_gettime(CLOCK_REALTIME, &end);
-#endif /* PETERSON_ALGO_N_PROCESS*/
-#ifdef WITH_SPIN_LOCK
-  clock_gettime(CLOCK_REALTIME, &begin);
-  while (__sync_bool_compare_and_swap(&pSharedMemory->lock, FALSE, TRUE) == FALSE)
-  {
-    //active loop
-    ;
-  }
-  clock_gettime(CLOCK_REALTIME, &end);
-#endif /* WITH_SPIN_LOCK */
-#ifdef WITH_SPIN_LOCK_WITH_PROCESS_ID
-  clock_gettime(CLOCK_REALTIME, &begin);
-  while (__sync_val_compare_and_swap(&pSharedMemory->lock, SPIN_LOCK_NO_LOCKED, ACQ_PROCESS_ID) != SPIN_LOCK_NO_LOCKED)
-  {
-    //active loop
-    ;
-  }
-  clock_gettime(CLOCK_REALTIME, &end);
-#endif /* WITH_SPIN_LOCK_WITH_PROCESS_ID */
-}
-
-
-static void leave_critical_section(shared_memory_area_struct* pSharedMemory)
-{
-#ifdef PETERSON_ALGO
-  pSharedMemory->flag[1] = FALSE;
-#endif /* PETERSON_ALGO */
-#ifdef PETERSON_ALGO_N_PROCESS
-  pSharedMemory->level[ACQ_PROCESS_ID] = -1;
-#endif /* PETERSON_ALGO_N_PROCESS */
-#ifdef WITH_SPIN_LOCK
-  __sync_synchronize();
-  pSharedMemory->lock = 0;
-#endif /* WITH_SPIN_LOCK */
-#ifdef WITH_SPIN_LOCK_WITH_PROCESS_ID
-  __sync_synchronize();
-  pSharedMemory->lock = SPIN_LOCK_NO_LOCKED;
-#endif /* WITH_SPIN_LOCK_WITH_PROCESS_ID */
-}
-
-
 int main(int argc, char* argv[])
 {
   UNUSED(argc);
@@ -102,8 +26,7 @@ int main(int argc, char* argv[])
   int shmid;
   shared_memory_area_struct* pSharedMemory;
 
-  shmid = shmget(SHARED_AREA_KEY, sizeof(shared_memory_area_struct), 0644 | IPC_CREAT);
-
+  shmid = shmget(SHARED_AREA_KEY, sizeof(shared_memory_area_struct), 0644 | IPC_CREAT /*| SHM_HUGETLB*/);
   if (shmid == -1)
   {
     fprintf(stdout, "errno = %d\n", errno);
@@ -120,53 +43,43 @@ int main(int argc, char* argv[])
     return EXIT_FAILURE;
   }
 
-#ifdef PETERSON_ALGO_N_PROCESS
-  //initialisation
-  for (int i = 0; i < NB_MAX_PROCESS; i++)
+  //initialisation allocation of data from pool
+  for(int i = 0; i < MAX_DATA; i++)
   {
-    pSharedMemory->level[i] = -1;
+    pSharedMemory->data_area[i].indexAcqOnGoing= i*2;
+    pSharedMemory->data_area[i].indexData = i*2+1;
   }
-#endif /* PETERSON_ALGO_N_PROCESS */
-#ifdef WITH_SPIN_LOCK
-  //initialize the spinlock
-  __sync_synchronize();
-  pSharedMemory->lock = 0;
-#endif /* WITH_SPIN_LOCK */
-#ifdef WITH_SPIN_LOCK_WITH_PROCESS_ID
-  __sync_synchronize();
-  pSharedMemory->lock = SPIN_LOCK_NO_LOCKED;
-#endif /* WITH_SPIN_LOCK_WITH_PROCESS_ID */
-
+  
   int time = 0;
   char charToFill = 0;
-
+  fprintf(stdout, "Start...\n");
+  fprintf(stdout, "pSharedMemory = %p\n", pSharedMemory);
+  fprintf(stdout,"for 0\n");
+  fprintf(stdout,"pSharedMemory->data_area[0].indexAcqOnGoing = %d\n", pSharedMemory->data_area[0].indexAcqOnGoing);
+  fprintf(stdout,"pSharedMemory->data_area[0].indexAcqOnGoing = %d\n", pSharedMemory->data_area[0].indexData);
+  
   while (1)
   {
     ///simulate an acquisition
     for (int i = 0 ; i < MAX_DATA; i++)
     {
-      //BEGIN critical section
-      enter_critical_section(pSharedMemory);
-      pSharedMemory->data_area[i].time = time++;
       charToFill++;
       charToFill %= 26;
-      memset(pSharedMemory->data_area[i].data, 'A' + charToFill, 29);
-      pSharedMemory->data_area[i].data[29] = '\0';
-      //END critical section
-      leave_critical_section(pSharedMemory);
+      int indexAcqOnGoing;
+      indexAcqOnGoing = pSharedMemory->data_area[i].indexAcqOnGoing;
+
+      pSharedMemory->desc[indexAcqOnGoing].timestamp = time;
+      memset(pSharedMemory->desc[indexAcqOnGoing].data, 'A' + charToFill, 29);
+      
+      //move from old to new 
+      int temp = pSharedMemory->data_area[i].indexData;
+       __atomic_store_n(&pSharedMemory->data_area[i].indexData, pSharedMemory->data_area[i].indexAcqOnGoing, __ATOMIC_SEQ_CST);
+      //pSharedMemory->data_area[i].indexData= pSharedMemory->data_area[i].indexAcqOnGoing;
+      pSharedMemory->data_area[i].indexAcqOnGoing = temp;
     }
 
     nanosleep(&waitTime, NULL);
-
-    if (time % 2048 == 0)
-    {
-      fprintf(stdout, "time = %d\n", time);
-      fprintf(stdout, "Busy Wait : %ld s, %ld ns\n", end.tv_sec - begin.tv_sec, end.tv_nsec - begin.tv_nsec);
-#ifdef WITH_SPIN_LOCK_WITH_PROCESS_ID
-      fprintf(stdout, "current process ID = %d\n", pSharedMemory->lock);
-#endif /* WITH_SPIN_LOCK_WITH_PROCESS_ID */
-    }
-
+    time++;
   }
 
 
