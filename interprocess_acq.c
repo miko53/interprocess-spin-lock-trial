@@ -44,20 +44,20 @@ int main(int argc, char* argv[])
   }
 
   //initialisation allocation of data from pool
-  for(int i = 0; i < MAX_DATA; i++)
+  for (int i = 0; i < MAX_DATA; i++)
   {
-    pSharedMemory->data_area[i].indexAcqOnGoing= i*2;
-    pSharedMemory->data_area[i].indexData = i*2+1;
+    pSharedMemory->data_area[i].indexAcqOnGoing = i * 2;
+    pSharedMemory->data_area[i].indexData = i * 2 + 1;
   }
-  
+
   int time = 0;
   char charToFill = 0;
   fprintf(stdout, "Start...\n");
   fprintf(stdout, "pSharedMemory = %p\n", pSharedMemory);
-  fprintf(stdout,"for 0\n");
-  fprintf(stdout,"pSharedMemory->data_area[0].indexAcqOnGoing = %d\n", pSharedMemory->data_area[0].indexAcqOnGoing);
-  fprintf(stdout,"pSharedMemory->data_area[0].indexAcqOnGoing = %d\n", pSharedMemory->data_area[0].indexData);
-  
+  fprintf(stdout, "for 0\n");
+  fprintf(stdout, "pSharedMemory->data_area[0].indexAcqOnGoing = %d\n", pSharedMemory->data_area[0].indexAcqOnGoing);
+  fprintf(stdout, "pSharedMemory->data_area[0].indexAcqOnGoing = %d\n", pSharedMemory->data_area[0].indexData);
+
   while (1)
   {
     ///simulate an acquisition
@@ -70,10 +70,10 @@ int main(int argc, char* argv[])
 
       pSharedMemory->desc[indexAcqOnGoing].timestamp = time;
       memset(pSharedMemory->desc[indexAcqOnGoing].data, 'A' + charToFill, 29);
-      
-      //move from old to new 
+
+      //move from old to new
       int temp = pSharedMemory->data_area[i].indexData;
-       __atomic_store_n(&pSharedMemory->data_area[i].indexData, pSharedMemory->data_area[i].indexAcqOnGoing, __ATOMIC_SEQ_CST);
+      __atomic_store_n(&pSharedMemory->data_area[i].indexData, pSharedMemory->data_area[i].indexAcqOnGoing, __ATOMIC_SEQ_CST);
       //pSharedMemory->data_area[i].indexData= pSharedMemory->data_area[i].indexAcqOnGoing;
       pSharedMemory->data_area[i].indexAcqOnGoing = temp;
     }

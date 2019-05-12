@@ -55,12 +55,12 @@ int main(int argc, char* argv[])
     char toTest;
     for (i = 0; i < MAX_DATA; i++)
     {
-     /* if (i ==0)
-      {
-        fprintf(stdout,"pSharedMemory->data_area[0].indexAcqOnGoing = %d\n", pSharedMemory->data_area[0].indexAcqOnGoing);
-        fprintf(stdout,"pSharedMemory->data_area[0].indexAcqOnGoing = %d\n", pSharedMemory->data_area[0].indexData);
-      }*/
-     
+      /* if (i ==0)
+       {
+         fprintf(stdout,"pSharedMemory->data_area[0].indexAcqOnGoing = %d\n", pSharedMemory->data_area[0].indexAcqOnGoing);
+         fprintf(stdout,"pSharedMemory->data_area[0].indexAcqOnGoing = %d\n", pSharedMemory->data_area[0].indexData);
+       }*/
+
       //int indexData = pSharedMemory->data_area[i].indexData;
       int indexData = __atomic_load_n(&pSharedMemory->data_area[i].indexData, __ATOMIC_SEQ_CST);
       descValue* pData = &pSharedMemory->desc[indexData];

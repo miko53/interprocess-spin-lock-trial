@@ -29,7 +29,7 @@ typedef struct
 typedef struct
 {
   basic_data data_area[MAX_DATA];
-  descValue desc[MAX_DATA*2];
+  descValue desc[MAX_DATA * 2];
 } shared_memory_area_struct;
 
 #endif /* INTERPRCESS_ACQ_H */
